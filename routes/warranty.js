@@ -4,7 +4,7 @@ const { addWarranty, getWarrantyById, getAllWarrantyByUser, updateWarrantyById, 
 const router = express.Router();
 
 router.post('/addWarranty', addWarranty);
-router.get('/getAllWarrantyByUser/:id', getAllWarrantyByUser); //userid
+router.get('/getAllWarrantyByUser/:addedBy', getAllWarrantyByUser); //userid
 router.get('/getWarrantyById/:id', getWarrantyById); //truckid
 router.delete('/deleteWarrantyById/:id', deleteWarrantyById);
 router.put('/updateWarrantyById/:id', updateWarrantyById);

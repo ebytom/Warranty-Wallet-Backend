@@ -29,15 +29,13 @@ const warrantySchema = new Schema({
   description: {
     type: String,
     trim: true,
-    required: [true, "Please provide details on coverage"],
   },
   addedBy: {
     type: String,
     required: [true, "User ID is required"],
   },
   invoiceURL: {
-    type: String,
-    required: [true, "Invoice URL is required"]
+    type: Array,
   }
 });
 

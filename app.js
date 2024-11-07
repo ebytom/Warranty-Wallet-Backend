@@ -15,6 +15,7 @@ const indexRouter = require('./routes/index');
 const usersRouter = require('./routes/users');
 const authRouter = require('./routes/auth');
 const adminRouter = require('./routes/admin');
+const warrantyRouter = require('./routes/warranty');
 
 // express app
 const app = express();
@@ -32,6 +33,8 @@ app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
 
 // routes
+app.use('/api/v1/app/warranty', warrantyRouter);
+
 app.use('/api/v1/app/auth', authRouter);
 app.use('/api/v1/app/users', isAuthenticated, usersRouter);
 app.use('/api/v1/admin', isAdmin, adminRouter);
