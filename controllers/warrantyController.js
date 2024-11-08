@@ -34,8 +34,8 @@ const getWarrantyById = async (req, res) => {
             return res.status(400).json({ message: 'Invalid warranty ID' });
         }
 
-        // Find the truck by ID
-        const warranty = await Warranty.findById(id);
+        // Find the warranty by ID
+        const warranty = await Warranty.findById(id).lean();
 
         if (!warranty) {
             return res.status(404).json({ message: 'Warranty not found' });
@@ -71,7 +71,7 @@ const getAllWarrantyByUser = async (req, res) => {
 const updateWarrantyById = async (req, res) => {
     try {
         const { id } = req.params;
-        const { itemName, category, warrantyProvider, purchasedOn, expiresOn, createdAt, description, addedBy, invoiceURL } = req.body.values;
+        const { itemName, category, warrantyProvider, purchasedOn, expiresOn, createdAt, description, addedBy, invoiceURL } = req.body;
 
         // Validate the ID
         if (!mongoose.Types.ObjectId.isValid(id)) {
