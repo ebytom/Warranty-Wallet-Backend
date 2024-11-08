@@ -101,7 +101,7 @@ const getAllWarrantyByUser = async (req, res) => {
 
             const totalDays = Math.ceil((expiresOn - purchasedOn) / (1000 * 60 * 60 * 24));
             const daysLeft = Math.max(0, Math.ceil((expiresOn - today) / (1000 * 60 * 60 * 24)));
-            const percentage = totalDays > 0 ? ((totalDays - daysLeft) / totalDays) * 100 : 0;
+            const percentage = totalDays > 0 ? ((totalDays - daysLeft) / totalDays) * 100 : 100;
 
             return {
                 ...warranty._doc,
@@ -175,11 +175,47 @@ const deleteWarrantyById = async (req, res) => {
     }
 };
 
+const getExpiringWarrantiesByUser = async (req, res) => {
+    try {
+        const { addedBy } = req.params; 
+        const today = new Date();
+        const tenDaysLater = new Date(today);
+        tenDaysLater.setDate(today.getDate() + 10);
+
+        // Find warranties for the specific user expiring in the next 10 days
+        const expiringWarranties = await Warranty.find({
+            addedBy,
+            expiresOn: { $gte: today, $lte: tenDaysLater }
+        });
+
+        if (expiringWarranties.length === 0) {
+            return res.status(404).json({ message: 'No warranties expiring in the next 10 days for this user' });
+        }
+
+        const result = expiringWarranties.map(warranty => {
+            const expiresOn = new Date(warranty.expiresOn);
+            const daysLeft = Math.max(0, Math.ceil((expiresOn - today) / (1000 * 60 * 60 * 24)));
+
+            return {
+                itemName: warranty.itemName,
+                daysLeft
+            };
+        });
+
+        res.status(200).json(result);
+    } catch (error) {
+        console.error('Error fetching expiring warranties by user:', error);
+        res.status(500).json({ message: 'Failed to fetch expiring warranties', error: error.message });
+    }
+};
+
+
 module.exports = {
     addWarranty,
     getWarrantyById,
     getAllWarrantyByUser,
     updateWarrantyById,
     deleteWarrantyById,
-    uploadInvoice
+    uploadInvoice,
+    getExpiringWarrantiesByUser
 };
