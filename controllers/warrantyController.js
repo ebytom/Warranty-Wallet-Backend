@@ -1,10 +1,44 @@
 const { default: mongoose, get } = require('mongoose');
 const Warranty = require('../models/warranty-model');
+const { log } = require('debug/src/browser');
+const aws = require('aws-sdk');
+const multer = require('multer');
+
+const s3 = new aws.S3({
+    region: "eu-north-1",
+    accessKeyId: process.env.AWS_ACCESS_KEY_ID,
+    secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY,
+    signatureVersion: 'v4'
+});
+
+const uploadInvoice = async (file) => {
+    console.log("Uploading file to S3:", file); // Debug log for file details
+
+    const params = {
+        Bucket: "warranty-wallet",
+        Key: `${Date.now()}-${file.originalname}`, // Unique file name in S3
+        Body: file.buffer,
+        ContentType: file.mimetype,
+    };
+
+    const data = await s3.upload(params).promise();
+    console.log("File uploaded successfully:", data.Location); // Log uploaded file URL
+    return data.Location;
+};
+
 
 const addWarranty = async (req, res) => {
     try {
-        const { itemName, category, warrantyProvider, purchasedOn, expiresOn, createdAt, description, addedBy, invoiceURL } = req.body;
+        const { itemName, category, warrantyProvider, purchasedOn, expiresOn, createdAt, description, addedBy } = req.body;
+        const file = req.file;
 
+        let invoiceURL = ""; // Define invoiceURL here so it can be updated in the if block
+
+        if (file) {
+            invoiceURL = await uploadInvoice(file); // Update the existing variable instead of redeclaring it
+        }
+
+        // Create and save new warranty document with S3 file URL
         const newWarranty = new Warranty({
             itemName,
             category,
@@ -20,8 +54,8 @@ const addWarranty = async (req, res) => {
         const savedWarranty = await newWarranty.save();
         res.status(201).json(savedWarranty);
     } catch (error) {
-        console.error('Error adding warranty:', error); // Log the full error
-        res.status(500).json({ message:'Failed to add warranty', error: error.message });
+        console.error('Error adding warranty:', error);
+        res.status(500).json({ message: 'Failed to add warranty', error: error.message });
     }
 };
 
@@ -53,15 +87,30 @@ const getAllWarrantyByUser = async (req, res) => {
         const { addedBy } = req.params;
 
         console.log(addedBy);
-        
 
-        const warranty = await Warranty.find({ addedBy });
+        const warranties = await Warranty.find({ addedBy });
 
-        if (warranty.length === 0) {
+        if (warranties.length === 0) {
             return res.status(404).json({ message: 'No warranty found for this user' });
         }
 
-        res.status(200).json(warranty);
+        const today = new Date();
+        const enrichedWarranties = warranties.map(warranty => {
+            const purchasedOn = new Date(warranty.purchasedOn);
+            const expiresOn = new Date(warranty.expiresOn);
+
+            const totalDays = Math.ceil((expiresOn - purchasedOn) / (1000 * 60 * 60 * 24));
+            const daysLeft = Math.max(0, Math.ceil((expiresOn - today) / (1000 * 60 * 60 * 24)));
+            const percentage = totalDays > 0 ? ((totalDays - daysLeft) / totalDays) * 100 : 0;
+
+            return {
+                ...warranty._doc,
+                daysLeft,
+                percentage: percentage.toFixed(2) // Round to 2 decimal places
+            };
+        });
+
+        res.status(200).json(enrichedWarranties);
     } catch (error) {
         console.error('Error fetching warranty by user:', error);
         res.status(500).json({ message: 'Failed to fetch warranty', error: error.message });
@@ -71,17 +120,26 @@ const getAllWarrantyByUser = async (req, res) => {
 const updateWarrantyById = async (req, res) => {
     try {
         const { id } = req.params;
-        const { itemName, category, warrantyProvider, purchasedOn, expiresOn, createdAt, description, addedBy, invoiceURL } = req.body;
+        const { itemName, category, warrantyProvider, purchasedOn, expiresOn, description } = req.body;
+        const file = req.file; // Get the uploaded file, if any
+
+        console.log(req.body);
 
         // Validate the ID
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({ message: 'Invalid warranty ID' });
         }
 
-        // Update the warranty with the provided fields
+        // Check if a new file was uploaded, and upload to S3 if so
+        let invoiceURL = req.body.invoiceURL;
+        if (file) {
+            invoiceURL = await uploadInvoice(file); // Upload new file to S3 and get the URL
+        }
+
+        // Update the warranty with the provided fields and (possibly new) invoiceURL
         const updatedWarranty = await Warranty.findByIdAndUpdate(
-            {_id:id},
-            { itemName, category, warrantyProvider, purchasedOn, expiresOn, createdAt, description, addedBy, invoiceURL },
+            { _id: id },
+            { itemName, category, warrantyProvider, purchasedOn, expiresOn, description, invoiceURL },
             { new: true }
         );
 
@@ -94,7 +152,7 @@ const updateWarrantyById = async (req, res) => {
         console.error('Error updating warranty:', error);
         res.status(500).json({ message: 'Failed to update warranty', error: error.message });
     }
-}
+};
 
 const deleteWarrantyById = async (req, res) => {
     try {
@@ -122,5 +180,6 @@ module.exports = {
     getWarrantyById,
     getAllWarrantyByUser,
     updateWarrantyById,
-    deleteWarrantyById
+    deleteWarrantyById,
+    uploadInvoice
 };

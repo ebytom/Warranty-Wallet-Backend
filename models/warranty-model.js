@@ -12,7 +12,6 @@ const warrantySchema = new Schema({
   },
   warrantyProvider: {
     type: String,
-    required: [true, "Warranty provider is required"],
   },
   purchasedOn: {
     type: Date,
@@ -35,7 +34,7 @@ const warrantySchema = new Schema({
     required: [true, "User ID is required"],
   },
   invoiceURL: {
-    type: Array,
+    type: String,
   }
 });
 
