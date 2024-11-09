@@ -35,6 +35,9 @@ const warrantySchema = new Schema({
   },
   invoiceURL: {
     type: String,
+  },
+  sharedWith: {
+    type:Array
   }
 });
 
