@@ -1,6 +1,5 @@
-const { default: mongoose, get } = require('mongoose');
+const { default: mongoose } = require('mongoose');
 const Warranty = require('../models/warranty-model');
-const { log } = require('debug/src/browser');
 const aws = require('aws-sdk');
 const multer = require('multer');
 
@@ -11,34 +10,34 @@ const s3 = new aws.S3({
     signatureVersion: 'v4'
 });
 
+// Uploads a file to S3
 const uploadInvoice = async (file) => {
-    console.log("Uploading file to S3:", file); // Debug log for file details
+    console.log("Uploading file to S3:", file);
 
     const params = {
         Bucket: "warranty-wallet",
-        Key: `${Date.now()}-${file.originalname}`, // Unique file name in S3
+        Key: `${Date.now()}-${file.originalname}`,
         Body: file.buffer,
         ContentType: file.mimetype,
     };
 
     const data = await s3.upload(params).promise();
-    console.log("File uploaded successfully:", data.Location); // Log uploaded file URL
+    console.log("File uploaded successfully:", data.Location);
     return data.Location;
 };
 
-
+// Adds a new warranty
 const addWarranty = async (req, res) => {
     try {
         const { itemName, category, warrantyProvider, purchasedOn, expiresOn, createdAt, description, addedBy } = req.body;
         const file = req.file;
 
-        let invoiceURL = ""; // Define invoiceURL here so it can be updated in the if block
+        let invoiceURL = "";
 
         if (file) {
-            invoiceURL = await uploadInvoice(file); // Update the existing variable instead of redeclaring it
+            invoiceURL = await uploadInvoice(file);
         }
 
-        // Create and save new warranty document with S3 file URL
         const newWarranty = new Warranty({
             itemName,
             category,
@@ -59,16 +58,15 @@ const addWarranty = async (req, res) => {
     }
 };
 
+// Fetches warranty by ID
 const getWarrantyById = async (req, res) => {
     try {
-        const { id } = req.params; // Get the ID from the request parameters
+        const { id } = req.params;
 
-        // Validate the ID
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({ message: 'Invalid warranty ID' });
         }
 
-        // Find the warranty by ID
         const warranty = await Warranty.findById(id).lean();
 
         if (!warranty) {
@@ -82,16 +80,18 @@ const getWarrantyById = async (req, res) => {
     }
 };
 
+// Fetches all warranties by user, including shared warranties
 const getAllWarrantyByUser = async (req, res) => {    
     try {
         const { addedBy } = req.params;
+        
+        const userWarranties = await Warranty.find({ addedBy });
+        const sharedWarranties = await Warranty.find({ sharedWith: addedBy });
 
-        console.log(addedBy);
-
-        const warranties = await Warranty.find({ addedBy });
+        const warranties = [...userWarranties, ...sharedWarranties];
 
         if (warranties.length === 0) {
-            return res.status(404).json({ message: 'No warranty found for this user' });
+            return res.status(404).json({ message: 'No warranties found for this user' });
         }
 
         const today = new Date();
@@ -106,37 +106,86 @@ const getAllWarrantyByUser = async (req, res) => {
             return {
                 ...warranty._doc,
                 daysLeft,
-                percentage: percentage.toFixed(2) // Round to 2 decimal places
+                percentage: percentage.toFixed(2)
             };
         });
 
         res.status(200).json(enrichedWarranties);
     } catch (error) {
-        console.error('Error fetching warranty by user:', error);
-        res.status(500).json({ message: 'Failed to fetch warranty', error: error.message });
+        console.error('Error fetching warranties by user:', error);
+        res.status(500).json({ message: 'Failed to fetch warranties', error: error.message });
     }
 };
 
+// Shares access to a warranty by adding email to the 'sharedWith' array
+const shareAccess = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { email } = req.body;
+
+        const warranty = await Warranty.findById(id);
+
+        if (!warranty) {
+            return res.status(404).json({ message: 'Warranty not found' });
+        }
+
+        if (warranty.sharedWith.includes(email)) {
+            return res.status(400).json({ message: 'Access already shared with this email' });
+        }
+
+        const user = await User.findOne({ email });  // Assuming you have a User model to validate the user
+        if (!user) {
+            return res.status(404).json({ message: 'Invalid user' });
+        }
+
+        warranty.sharedWith.push(email);
+        await warranty.save();
+
+        res.status(200).json({ message: 'Access shared successfully' });
+    } catch (error) {
+        console.error('Error sharing access:', error);
+        res.status(500).json({ message: 'Failed to share access', error: error.message });
+    }
+};
+
+// Revokes access by removing an email from the 'sharedWith' array
+const revokeAccess = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { email } = req.body;
+
+        const warranty = await Warranty.findById(id);
+
+        if (!warranty) {
+            return res.status(404).json({ message: 'Warranty not found' });
+        }
+
+        warranty.sharedWith = warranty.sharedWith.filter(sharedEmail => sharedEmail !== email);
+        await warranty.save();
+
+        res.status(200).json({ message: 'Access revoked successfully' });
+    } catch (error) {
+        console.error('Error revoking access:', error);
+        res.status(500).json({ message: 'Failed to revoke access', error: error.message });
+    }
+};
+
+// Updates warranty by ID
 const updateWarrantyById = async (req, res) => {
     try {
         const { id } = req.params;
         const { itemName, category, warrantyProvider, purchasedOn, expiresOn, description } = req.body;
-        const file = req.file; // Get the uploaded file, if any
+        const file = req.file;
 
-        console.log(req.body);
-
-        // Validate the ID
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({ message: 'Invalid warranty ID' });
         }
 
-        // Check if a new file was uploaded, and upload to S3 if so
         let invoiceURL = req.body.invoiceURL;
         if (file) {
-            invoiceURL = await uploadInvoice(file); // Upload new file to S3 and get the URL
+            invoiceURL = await uploadInvoice(file);
         }
 
-        // Update the warranty with the provided fields and (possibly new) invoiceURL
         const updatedWarranty = await Warranty.findByIdAndUpdate(
             { _id: id },
             { itemName, category, warrantyProvider, purchasedOn, expiresOn, description, invoiceURL },
@@ -154,14 +203,15 @@ const updateWarrantyById = async (req, res) => {
     }
 };
 
+// Deletes a warranty by ID
 const deleteWarrantyById = async (req, res) => {
     try {
         const { id } = req.params;
 
-        // Validate the warranty ID
         if (!mongoose.Types.ObjectId.isValid(id)) {
             return res.status(400).json({ message: 'Invalid warranty ID' });
         }
+
         const deletedWarranty = await Warranty.findByIdAndDelete(id);
 
         if (!deletedWarranty) {
@@ -175,6 +225,7 @@ const deleteWarrantyById = async (req, res) => {
     }
 };
 
+// Fetches warranties expiring soon
 const getExpiringWarrantiesByUser = async (req, res) => {
     try {
         const { addedBy } = req.params; 
@@ -182,7 +233,6 @@ const getExpiringWarrantiesByUser = async (req, res) => {
         const tenDaysLater = new Date(today);
         tenDaysLater.setDate(today.getDate() + 10);
 
-        // Find warranties for the specific user expiring in the next 10 days
         const expiringWarranties = await Warranty.find({
             addedBy,
             expiresOn: { $gte: today, $lte: tenDaysLater }
@@ -209,7 +259,6 @@ const getExpiringWarrantiesByUser = async (req, res) => {
     }
 };
 
-
 module.exports = {
     addWarranty,
     getWarrantyById,
@@ -217,5 +266,7 @@ module.exports = {
     updateWarrantyById,
     deleteWarrantyById,
     uploadInvoice,
-    getExpiringWarrantiesByUser
+    getExpiringWarrantiesByUser,
+    shareAccess,
+    revokeAccess
 };

@@ -7,6 +7,8 @@ const {
   deleteWarrantyById,
   uploadInvoice,
   getExpiringWarrantiesByUser,
+  shareAccess,
+  revokeAccess
 } = require("../controllers/warrantyController");
 const multer = require("multer");
 
@@ -28,5 +30,7 @@ router.put(
   updateWarrantyById
 );
 router.get("/getExpiringWarrantiesByUser/:addedBy", getExpiringWarrantiesByUser);
+router.post("/shareAccess/:id", shareAccess);
+router.delete("revokeAccess/:id", revokeAccess);
 
 module.exports = router;
