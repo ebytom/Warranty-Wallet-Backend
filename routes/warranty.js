@@ -31,6 +31,6 @@ router.put(
 );
 router.get("/getExpiringWarrantiesByUser/:addedBy", getExpiringWarrantiesByUser);
 router.post("/shareAccess/:id", shareAccess);
-router.delete("revokeAccess/:id", revokeAccess);
+router.delete("/revokeAccess/:id", revokeAccess);
 
 module.exports = router;
