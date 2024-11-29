@@ -25,18 +25,17 @@ const uploadInvoice = async (file) => {
   return data.Location;
 };
 
-// Adds a new warranty
 const addWarranty = async (req, res) => {
   try {
     const {
-      itemName,
-      category,
-      warrantyProvider,
-      purchasedOn,
-      expiresOn,
-      createdAt,
-      description,
-      addedBy,
+      itemName = '',
+      category = '',
+      warrantyProvider = '',
+      purchasedOn = null,  
+      expiresOn = null,   
+      createdAt = new Date(), 
+      description = '',
+      addedBy = '',
     } = req.body;
     const file = req.file;
 
@@ -47,26 +46,41 @@ const addWarranty = async (req, res) => {
     }
 
     const newWarranty = new Warranty({
-      itemName,
-      category,
-      warrantyProvider,
-      purchasedOn,
-      expiresOn,
-      createdAt,
-      description,
-      addedBy,
-      invoiceURL,
+      itemName: itemName || "",
+      category: category || "",
+      warrantyProvider: warrantyProvider || "",
+      purchasedOn: purchasedOn,
+      expiresOn: expiresOn,
+      createdAt: createdAt || new Date(),
+      description: description || "",
+      addedBy: addedBy || "",
+      invoiceURL: invoiceURL || "",
     });
 
-    const savedWarranty = await newWarranty.save();
-    res.status(201).json(savedWarranty);
+    const user = await User.findOne({ googleId: addedBy });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    // Save the new warranty
+    await newWarranty.save();
+
+    // Fetch all warranties for the user after adding the new one
+    const warranties = await getAllWarrantyByUserHelper(addedBy);
+
+    // Send the response with all warranties
+    res.status(201).json({
+      message: "Warranty added successfully",
+      warranties,
+    });
+    
   } catch (error) {
     console.error("Error adding warranty:", error);
-    res
-      .status(500)
-      .json({ message: "Failed to add warranty", error: error.message });
+    res.status(500).json({ message: "Failed to add warranty", error: error.message });
   }
 };
+
 
 // Fetches warranty by ID
 const getWarrantyById = async (req, res) => {
@@ -96,13 +110,14 @@ const getAllWarrantyByUser = async (req, res) => {
   try {
     const { addedBy } = req.params;
 
-    // Find the user's email using the addedBy ID
-    const user = await User.find({ googleId: addedBy });
-    
+    // Find the user by googleId, expecting only one user
+    const user = await User.findOne({ googleId: addedBy });
+
     if (!user) {
       return res.status(404).json({ message: "User not found" });
     }
-    const userEmail = user[0].email;
+
+    const userEmail = user.email; // Directly access the email field
 
     // Retrieve warranties added by the user and those shared with the user
     const userWarranties = await Warranty.find({ addedBy });
@@ -148,6 +163,51 @@ const getAllWarrantyByUser = async (req, res) => {
   }
 };
 
+const getAllWarrantyByUserHelper = async (addedBy) => {
+  const user = await User.findOne({ googleId: addedBy });
+
+  if (!user) {
+    throw new Error("User not found");
+  }
+
+  const userEmail = user.email;
+
+  const userWarranties = await Warranty.find({ addedBy });
+  const sharedWarranties = await Warranty.find({ sharedWith: userEmail });
+
+  const warranties = [...userWarranties, ...sharedWarranties];
+
+  if (warranties.length === 0) {
+    throw new Error("No warranties found for this user");
+  }
+
+  const today = new Date();
+  const enrichedWarranties = warranties.map((warranty) => {
+    const purchasedOn = new Date(warranty.purchasedOn);
+    const expiresOn = new Date(warranty.expiresOn);
+
+    const totalDays = Math.ceil(
+      (expiresOn - purchasedOn) / (1000 * 60 * 60 * 24)
+    );
+    const daysLeft = Math.max(
+      0,
+      Math.ceil((expiresOn - today) / (1000 * 60 * 60 * 24))
+    );
+    const percentage =
+      totalDays > 0 ? ((totalDays - daysLeft) / totalDays) * 100 : 100;
+
+    return {
+      ...warranty._doc,
+      daysLeft,
+      percentage: percentage.toFixed(2),
+      addedByEmail: userEmail,
+    };
+  });
+
+  return enrichedWarranties;
+};
+
+
 const shareAccess = async (req, res) => {
   try {
     const { id } = req.params;
@@ -182,7 +242,7 @@ const shareAccess = async (req, res) => {
       .status(200)
       .json({
         message: "Access shared successfully",
-        sharedWith: warranty.sharedWith,
+        warranty
       });
   } catch (error) {
     console.error("Error sharing access:", error);
@@ -221,7 +281,6 @@ const revokeAccess = async (req, res) => {
   }
 };
 
-// Updates warranty by ID
 const updateWarrantyById = async (req, res) => {
   try {
     const { id } = req.params;
@@ -232,18 +291,25 @@ const updateWarrantyById = async (req, res) => {
       purchasedOn,
       expiresOn,
       description,
+      addedBy, // Ensure the addedBy field is available for querying user warranties
     } = req.body;
     const file = req.file;
 
+    // Validate the warranty ID
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: "Invalid warranty ID" });
     }
 
+    console.log(req.body);
+    
+
+    // Update the invoice URL if a new file is provided
     let invoiceURL = req.body.invoiceURL;
     if (file) {
       invoiceURL = await uploadInvoice(file);
     }
 
+    // Update the warranty
     const updatedWarranty = await Warranty.findByIdAndUpdate(
       { _id: id },
       {
@@ -255,14 +321,22 @@ const updateWarrantyById = async (req, res) => {
         description,
         invoiceURL,
       },
-      { new: true }
+      { new: true } // Return the updated document
     );
 
     if (!updatedWarranty) {
       return res.status(404).json({ message: "Warranty not found" });
     }
 
-    res.status(200).json(updatedWarranty);
+    // Fetch all warranties for the user after the update
+    const warranties = await getAllWarrantyByUserHelper(addedBy);
+
+    // Send the response with all warranties (including the updated one)
+    res.status(200).json({
+      message: "Warranty updated successfully",
+      warranty:updatedWarranty,
+      warranties   
+    });
   } catch (error) {
     console.error("Error updating warranty:", error);
     res
@@ -299,6 +373,7 @@ const deleteWarrantyById = async (req, res) => {
 const getExpiringWarrantiesByUser = async (req, res) => {
   try {
     const { addedBy } = req.params;
+    
     const today = new Date();
     const tenDaysLater = new Date(today);
     tenDaysLater.setDate(today.getDate() + 10);
