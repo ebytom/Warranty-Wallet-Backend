@@ -1,7 +1,7 @@
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { OAuth2Client } = require("google-auth-library");
-const User = require("../models/user-model");
+const userModel = require("../models/user-model");
 const ErrorHandler = require("../middleware/errorHandlers");
 const { catchAsyncError } = require("../middleware/catchAsyncError");
 
@@ -24,13 +24,13 @@ module.exports.signUpWithGoogle = async (req, res) => {
     const picture = payload.picture;
     const name = payload.name || "User";
 
-    let user = await User.findOne({ googleId: userId });
+    let user = await userModel.findOne({ googleId: userId });
 
     const isSubscribed = user ? user.isSubscribed : false;
 
     if (!user) {
       // Create a new user if not found
-      user = new User({
+      user = new userModel({
         googleId: userId,
         email,
         name,
@@ -166,8 +166,9 @@ module.exports.signUp = async (req, res, next) => {
 };
 
 module.exports.logOut = catchAsyncError(async (req, res, next) => {
-  try {
-  } catch (error) {}
+  res.status(200).json({
+    message: "Logged out successfully"
+  });
 });
 
 module.exports.changePassword = catchAsyncError(async (req, res, next) => {

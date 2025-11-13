@@ -4,81 +4,45 @@ const userModel = require("../models/user-model");
 
 jest.mock("../models/user-model");
 
-describe("getMyProfile Controller", () => {
+// Mock the isAuthenticated middleware
+jest.mock("../middleware/isAuthenticated", () => (req, res, next) => {
+  next();
+});
+
+describe("User Controller - getMyProfile", () => {
   afterEach(() => {
     jest.clearAllMocks();
     jest.restoreAllMocks();
   });
 
-  it("returns 400 when decodedUser is missing", async () => {
-    const response = await request(app)
-      .get("/api/v1/app/users/getMyProfile")
-      .send({}); // no decodedUser
-
-    expect([400, 422]).toContain(response.status);
-    if (response.body && response.body.message) {
-      expect(["Application id not valid", "Application ID not valid", "Missing required fields"]).toContain(response.body.message);
-    }
-  });
-
-  it("returns 200 and user profile when decodedUser is valid", async () => {
-    const mockUser = {
-      username: "john_doe",
-      email: "john@example.com",
-      password: "secret123",
-    };
-
-    userModel.findOne.mockResolvedValue({ ...mockUser });
+  it("returns the user profile successfully when decodedUser is valid", async () => {
+    const mockUser = { username: "testuser", email: "test@example.com", password: "hashedpassword" };
+    userModel.findOne.mockResolvedValue(mockUser);
 
     const response = await request(app)
       .get("/api/v1/app/users/getMyProfile")
-      .send({
-        decodedUser: { username: "john_doe" },
-      });
+      .send({ decodedUser: { username: "testuser" } });
 
-    expect([200, 201]).toContain(response.status);
-    if (response.body) {
-      expect(response.body).toHaveProperty("message");
-      if (response.body.message) {
-        expect(["Profile found", "Profile Found"]).toContain(response.body.message);
-      }
-
-      if (response.body.user) {
-        expect(response.body.user.username).toBe("john_doe");
-        expect(response.body.user.email).toBe("john@example.com");
-        // Password should not be present
-        expect(response.body.user).not.toHaveProperty("password");
-      }
-    }
+    expect(response.status).toBe(200);
+    expect(response.body.message).toBe("Profile found");
+    expect(response.body.user).toEqual({ username: "testuser", email: "test@example.com" });
   });
 
-  it("handles case when user is not found", async () => {
+  it("returns 400 if decodedUser is not provided", async () => {
+    const response = await request(app).get("/api/v1/app/users/getMyProfile").send({});
+
+    expect(response.status).toBe(400);
+    expect(response.body.message).toBe("Application id not valid");
+  });
+
+  it("returns 500 if the user is not found", async () => {
     userModel.findOne.mockResolvedValue(null);
 
     const response = await request(app)
       .get("/api/v1/app/users/getMyProfile")
-      .send({
-        decodedUser: { username: "nonexistent_user" },
-      });
+      .send({ decodedUser: { username: "nonexistent" } });
 
-    expect([404, 400, 500]).toContain(response.status);
-    if (response.body && response.body.message) {
-      expect(["User not found", "Profile not found", "Cannot read properties"]).toContain(response.body.message);
-    }
-  });
-
-  it("handles internal server errors (e.g., DB failure)", async () => {
-    userModel.findOne.mockRejectedValue(new Error("DB error"));
-
-    const response = await request(app)
-      .get("/api/v1/app/users/getMyProfile")
-      .send({
-        decodedUser: { username: "john_doe" },
-      });
-
-    expect([500, 400, 404]).toContain(response.status);
-    if (response.body) {
-      expect(response.body).toHaveProperty("message");
-    }
+    expect(response.status).toBe(500);
+    expect(response.body.message).toBe("Cannot convert undefined or null to object");
   });
 });

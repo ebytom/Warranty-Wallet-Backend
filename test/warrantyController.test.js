@@ -38,10 +38,8 @@ describe("Warranty Controller", () => {
 
       jest.spyOn(User, "findOne").mockResolvedValue(mockUser);
       jest.spyOn(Warranty.prototype, "save").mockResolvedValue(mockWarranties[0]);
+      jest.spyOn(Warranty, "find").mockResolvedValue(mockWarranties);
 
-      // Mock the getAllWarrantyByUserHelper function
-      const originalController = require("../controllers/warrantyController");
-      jest.spyOn(originalController, "getAllWarrantyByUserHelper").mockResolvedValue(mockWarranties);
 
       const response = await request(app)
         .post("/api/v1/app/warranty/addWarranty")
@@ -54,11 +52,9 @@ describe("Warranty Controller", () => {
         .field("addedBy", "12345")
         .attach("invoiceFile", Buffer.from("mock file content"), "invoice.pdf");
 
-      expect([200, 201]).toContain(response.status);
-      expect(response.body).toHaveProperty("message");
-      expect(["Warranty added successfully", "Warranty Added Successfully"]).toContain(response.body.message);
-      expect(response.body).toHaveProperty("warranties");
-      expect(Array.isArray(response.body.warranties)).toBe(true);
+      expect(response.status).toBe(201);
+      expect(response.body.message).toBe("Warranty added successfully");
+      expect(response.body.warranties).toBeDefined();
     });
 
     it("returns 404 if the user is not found", async () => {
@@ -76,9 +72,8 @@ describe("Warranty Controller", () => {
           addedBy: "12345",
         });
 
-      expect([404, 400]).toContain(response.status);
-      expect(response.body).toHaveProperty("message");
-      expect(["User not found", "User Not Found"]).toContain(response.body.message);
+      expect(response.status).toBe(404);
+      expect(response.body.message).toBe("User not found");
     });
 
     it("returns 500 if an error occurs during warranty creation", async () => {
@@ -96,9 +91,8 @@ describe("Warranty Controller", () => {
           addedBy: "12345",
         });
 
-      expect([500, 400]).toContain(response.status);
-      expect(response.body).toHaveProperty("message");
-      expect(["Failed to add warranty", "Failed To Add Warranty"]).toContain(response.body.message);
+      expect(response.status).toBe(500);
+      expect(response.body.message).toBe("Failed to add warranty");
     });
   });
 
@@ -120,8 +114,8 @@ describe("Warranty Controller", () => {
 
       const response = await request(app).get(`/api/v1/app/warranty/getWarrantyById/${mockWarranty._id}`);
 
-      expect([200, 201]).toContain(response.status);
-      expect(response.body).toHaveProperty("itemName", "Laptop");
+      expect(response.status).toBe(200);
+      expect(response.body.itemName).toBe("Laptop");
     });
 
     it("returns 404 if the warranty is not found", async () => {
@@ -131,17 +125,15 @@ describe("Warranty Controller", () => {
 
       const response = await request(app).get(`/api/v1/app/warranty/getWarrantyById/${new mongoose.Types.ObjectId()}`);
 
-      expect([404, 400]).toContain(response.status);
-      expect(response.body).toHaveProperty("message");
-      expect(["Warranty not found", "Warranty Not Found"]).toContain(response.body.message);
+      expect(response.status).toBe(404);
+      expect(response.body.message).toBe("Warranty not found");
     });
 
     it("returns 400 for an invalid warranty ID", async () => {
       const response = await request(app).get("/api/v1/app/warranty/getWarrantyById/invalid-id");
 
-      expect([400, 404]).toContain(response.status);
-      expect(response.body).toHaveProperty("message");
-      expect(["Invalid warranty ID", "Invalid Warranty ID"]).toContain(response.body.message);
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe("Invalid warranty ID");
     });
   });
 
@@ -152,15 +144,10 @@ describe("Warranty Controller", () => {
 
       jest.spyOn(Warranty, "findByIdAndDelete").mockResolvedValue(mockWarranty);
 
-      // Mock the getAllWarrantyByUserHelper function
-      const originalController = require("../controllers/warrantyController");
-      jest.spyOn(originalController, "getAllWarrantyByUserHelper").mockResolvedValue(mockWarranties);
-
       const response = await request(app).delete(`/api/v1/app/warranty/deleteWarrantyById/${mockWarranty._id}`);
 
-      expect([200, 201]).toContain(response.status);
-      expect(response.body).toHaveProperty("message");
-      expect(["Warranty deleted", "Warranty Deleted"]).toContain(response.body.message);
+      expect(response.status).toBe(200);
+      expect(response.body.message).toBe("Warranty deleted");
     });
 
     it("returns 404 if the warranty to delete is not found", async () => {
@@ -168,17 +155,15 @@ describe("Warranty Controller", () => {
 
       const response = await request(app).delete(`/api/v1/app/warranty/deleteWarrantyById/${new mongoose.Types.ObjectId()}`);
 
-      expect([404, 400]).toContain(response.status);
-      expect(response.body).toHaveProperty("message");
-      expect(["Warranty not found", "Warranty Not Found"]).toContain(response.body.message);
+      expect(response.status).toBe(404);
+      expect(response.body.message).toBe("Warranty not found");
     });
 
     it("returns 400 for an invalid warranty ID", async () => {
       const response = await request(app).delete("/api/v1/app/warranty/deleteWarrantyById/invalid-id");
 
-      expect([400, 404]).toContain(response.status);
-      expect(response.body).toHaveProperty("message");
-      expect(["Invalid warranty ID", "Invalid Warranty ID"]).toContain(response.body.message);
+      expect(response.status).toBe(400);
+      expect(response.body.message).toBe("Invalid warranty ID");
     });
   });
 
